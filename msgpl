@@ -1,0 +1,143 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use Data::Dumper;
+
+require Encode;
+
+my @dict;			# array of words of given length
+my %az;				# as above but associative and a-z sorted
+my @letters;			# array of letters that make word we look square for
+my @tmp;			# temporary array
+my @square;			# array that holds magic square candidate
+my $file = "vortaro-eo.txt";	# dictionary
+my $letter;			# used by square_fill sub
+my $word_length;		# word's 1st letter
+my $limit;			# square word's length 
+my $word;
+my $found = 0;			# result
+
+print "\nmsgpl v1.0 - dictionary based Magic Square generator\n";
+print "programmed by: tmk, https://github.com/gitendo/msgpl/\n\n";
+
+# obligatory check
+#unless( defined $ARGV[0] && $ARGV[1]) {
+#    die "Specify word's length and starting letter ie.: $0 3 a\n\n";
+#}
+
+# get arguments
+if ( $ARGV[0] =~ /^-?\d+\z/ && $ARGV[1] =~ /\D/ ) {
+    $word_length = $ARGV[0];	# must be integer
+    $limit = $ARGV[1];		# non digits is fine ;)
+} else {
+    die "Specify word's length and starting letter ie.: $0 3 a\n\n";
+}
+
+# get dictionary file access
+unless( open DICT, $file ) {
+    die "Unable to open $file ($!)\n\n";
+}
+
+# filter main wordset
+while( <DICT> ) {
+    chomp;
+    $_ =~ s/\s+$//;		# rtrim
+    # skip words with non ascii letter(s)
+    if( $_ =~ /^[\x00-\x7F]*\z/ && $word_length == length $_ ) {
+	$_ = lc $_;		# lowercase
+	push( @dict, $_ );
+    }
+}
+
+unless( scalar @dict ) {
+    die "No words matching criteria found!\n\n";
+}
+
+# put wordset into associative array a-z sorted
+foreach( @dict ) {
+    $letter = substr($_, 0, 1);
+    push( @{ $az{$letter} }, $_ ); 
+}
+
+# stats
+print "Found " . scalar @dict . " words made of " . $word_length . " letters, ";
+unless ( scalar @{ $az{$limit} || []  } ) {
+    print "0";
+} else {
+    print scalar @{ $az{$limit} };
+}
+print " starting with letter \'" . $limit . "\'.\n\n";
+
+# iterate through all words; each word starts a square; split it into letters
+# and filter dictionary to get subsets of words matching every letter
+foreach( @{ $az{$limit} } ) {
+    $word++;
+    push( @square, $_ );
+    @letters = split( '', $_ );
+    print "(" . $word . "\\" . scalar @{ $az{$limit} } . "): $_\n\n";
+    $letter = 1;	# skip 1st letter since we already have the word
+    &fill_square;
+}
+
+print "Executed in: " . (time - $^T) . " second(s), found " . $found ." magic sqares!\n\n";
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# several checks before square is considered a valid one
+sub check_square {
+    # allow square with distinct words only
+    my %distinct = map { $_ => 1 } @square; #scalar( keys { map { $_ => 1 } @square } );
+    return if( scalar keys %distinct != $word_length );
+
+    # split each word into letters, we need 2D array
+    for( my $i = 0; $i < scalar @letters; $i++ ) {
+	@_ = split( '', $square[$i] );
+	$tmp[$i] = [ @_ ];
+	splice @_;
+    }
+    # now it's easy enough to check if they match, skip 0 to speed up ;)
+    for( my $i = 1; $i < scalar @letters; $i++ ) {
+        print "*\b";
+	for( my $j = 0; $j < scalar @letters; $j++ ) {
+	    print " \b";
+	    return if( $tmp[$i][$j] ne $tmp[$j][$i] );
+	}
+    }
+#    return if( $tmp[1][2] ne $tmp[2][1]);
+
+#    return if( $tmp[1][3] ne $tmp[3][1]);
+#    return if( $tmp[2][3] ne $tmp[3][2]);
+
+#    return if( $tmp[4][1] ne $tmp[1][4]);
+#    return if( $tmp[4][2] ne $tmp[2][4]);
+
+    # print magic square
+    for( my $i = 0; $i < scalar @letters; $i++ ) {
+	print "   ";
+	for( my $j = 0; $j < scalar @letters; $j++ ) {
+	    print "$tmp[$i][$j] ";
+	}
+	print "\n";
+    }
+    $found++;
+    print "\n";
+}
+
+# depending on number of keyword's letters this function calls itself to
+# fill the square with every possible word grouping
+sub fill_square {
+
+    foreach ( @{ $az{$letters[$letter]} } ) {
+	push( @square, $_ );
+	if( $letter != $#letters ) {
+	    $letter++;
+	    &fill_square;
+	} else {
+	    &check_square;
+	    pop @square;
+	}
+    }
+    pop @square;
+    $letter--;
+}
