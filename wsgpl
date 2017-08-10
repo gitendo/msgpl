@@ -18,8 +18,8 @@ my $limit;			# square word's length
 my $word;
 my $found = 0;			# result
 
-print "\nmsgpl v1.0 - dictionary based Magic Square generator\n";
-print "programmed by: tmk, https://github.com/gitendo/msgpl/\n\n";
+print "\nwsgpl v1.0 - dictionary based Magic Square generator\n";
+print "programmed by: tmk, https://github.com/gitendo/wsgpl/\n\n";
 
 # obligatory check
 #unless( defined $ARGV[0] && $ARGV[1]) {
