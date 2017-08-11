@@ -1,0 +1,192 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use Data::Dumper;
+
+my @dict;			# array of words of given length
+my %az;				# as above but associative and a-z sorted
+my @letters;			# array of letters that make word we look square for
+my @square;			# array that holds magic square candidate
+my @tmp;			# array of @square words split into letters
+my %eo = ( 'C' => 'ĉ', 'G' => 'ĝ', 'H' => 'ĥ', 'J' => 'ĵ', 'S' => 'ŝ', 'U' => 'ŭ' );
+my $file = "vortaro-eo.txt";	# dictionary
+my $letter;			# handles recursion and pattern check
+my $word_length;		# square word's length
+my $alpha;			# square word's 1st letter
+my $current_word;		# currently processed word
+my $start_from;			# continue processing from word (#/123)
+my $found = 0;			# result
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+print "\nwsgpl v1.1e - dictionary based word square generator\n";
+print "programmed by: tmk, https://github.com/gitendo/wsgpl/\n\n";
+
+my $usage = "Specify <word's length> <starting letter> and (starting word) ie.: $0 3 a 16\n\n";
+
+# obligatory check
+die $usage unless( defined $ARGV[0] && $ARGV[1] );
+
+# get arguments
+if( $ARGV[0] =~ /^-?\d+\z/ && $ARGV[1] =~ /\D/ ) {
+    $word_length = $ARGV[0];		# must be integer
+    $alpha = substr(&eo2ascii($ARGV[1]), 0, 1);	# non digits is fine ;)
+} else {
+    die $usage;
+}
+
+# this one is optional
+if( defined $ARGV[2] && $ARGV[2] =~ /^-?\d+\z/ ) {
+    $start_from = --$ARGV[2];
+} else {
+    $start_from = 0;
+}
+
+# get dictionary file access
+unless( open DICT, $file ) {
+    die "Unable to open $file ($!)\n\n";
+}
+
+# filter main wordset
+while( <DICT> ) {
+    chomp;
+    $_ =~ s/\s+$//;		# rtrim
+    $_ = &eo2ascii($_);		# replace esperanto chars with caps
+    # skip words with non ascii letter(s)
+    if( $_ =~ /^[\x00-\x7F]*\z/ && $word_length == length $_ ) {
+	push( @dict, $_ );
+    }
+}
+
+unless( scalar @dict ) {
+    die "No words matching criteria found!\n\n";
+}
+
+# put wordset into associative array a-z sorted
+foreach( @dict ) {
+    $letter = substr($_, 0, 1);
+    push( @{ $az{$letter} }, $_ ); 
+}
+
+# stats
+print "Found " . scalar @dict . " words made of " . $word_length . " letters, ";
+unless ( scalar @{ $az{$alpha} || []  } ) {
+    print "0";
+} else {
+    print scalar @{ $az{$alpha} };
+}
+print " starting with letter \'" . $alpha . "\'.\n\n";
+
+# iterate through all selected words; each word starts a square
+foreach( @{ $az{$alpha} } ) {
+    next if( $current_word++ < $start_from );
+    push( @square, $_ );	# 1st entry
+    @letters = split( '', $_ );
+    $tmp[0] = [ @letters ];
+    print "(" . $current_word . "\\" . scalar @{ $az{$alpha} } . "): " . &ascii2eo($_) . "\n\n";
+    $letter = 1;	# skip 1st letter since we already have it, it's our keyword
+    &fill_square;
+}
+
+print "Executed in: " . (time - $^T) . " second(s), found " . $found ." magic sqares!\n\n";
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# depending on number of keyword's letters this function calls itself to
+# fill the square with every possible word grouping
+
+sub fill_square {
+    foreach ( @{ $az{$letters[$letter]} } ) {	# get next word
+	if( &check_square($_) ) {		# check if it's valid
+	    push( @square, $_ );		# add to square
+	    if( $letter != $#letters ) {	# move to another word set if possible
+		$letter++;
+		&fill_square;			# recursion
+	    } else {
+		&print_square;			# no more word sets, we got square
+		pop @square;			# remove last word and continue
+	    }
+	}
+    }
+    pop @square;				# remove last word and move back
+    $letter--;					# to previous word set
+}
+
+
+# several checks before square is considered a valid one
+
+sub check_square {
+    my $word = $_[0];				# param
+
+    # allow square with distinct words only
+    if ( grep( /^($word)$/, @square ) ) {
+	return 0;
+    }
+
+    # split word into letters, add it to 2D array
+    @_ = split( '', $word );
+    $tmp[$letter] = [ @_ ];
+
+    # check if magic pattern matches
+    for( my $i = ($letter - 1); $i > 0; $i--) {		# (2,1), (3,2;3,1), (4,3;4,2;4,1), ...
+	if( $tmp[$letter][$i] ne $tmp[$i][$letter] ) {
+	    pop @tmp;
+	    return 0;
+	}
+    }
+
+    return 1;
+}
+
+
+# prints out valid square
+
+sub print_square {
+    # print magic square
+    for( my $i = 0; $i < scalar @letters; $i++ ) {
+	print "   ";
+	for( my $j = 0; $j < scalar @letters; $j++ ) {
+	    if ( $tmp[$i][$j] =~ /[A-Z]/ ) {
+		print "$eo{$tmp[$i][$j]} ";
+	    } else {
+		print "$tmp[$i][$j] ";
+	    }
+	}
+	print "\n";
+    }
+    $found++;
+    print "\n";
+}
+
+
+# replace esperanto with ascii chars
+
+sub eo2ascii {
+    $_[0] = lc $_[0];		# lowercase
+    $_[0] =~ s/Ĉ/C/g;
+    $_[0] =~ s/ĉ/C/g;
+    $_[0] =~ s/Ĝ/G/g;
+    $_[0] =~ s/ĝ/G/g;
+    $_[0] =~ s/Ĥ/H/g;
+    $_[0] =~ s/ĥ/H/g;
+    $_[0] =~ s/Ĵ/J/g;
+    $_[0] =~ s/ĵ/J/g;
+    $_[0] =~ s/Ŝ/S/g;
+    $_[0] =~ s/ŝ/S/g;
+    $_[0] =~ s/Ŭ/U/g;
+    $_[0] =~ s/ŭ/U/g;
+    return $_[0];
+}
+
+# replace caps with esperanto chars
+
+sub ascii2eo {
+    $_[0] =~ s/C/ĉ/g;
+    $_[0] =~ s/G/ĝ/g;
+    $_[0] =~ s/H/ĥ/g;
+    $_[0] =~ s/J/ĵ/g;
+    $_[0] =~ s/S/ŝ/g;
+    $_[0] =~ s/U/ŭ/g;
+    return $_[0];
+}
